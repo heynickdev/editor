@@ -1,2 +1,0 @@
-editor: editor.c
-  $(GCC) editor.c -o nickedit -Wall -Wextra -pedantic -std=c99
