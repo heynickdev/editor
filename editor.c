@@ -68,6 +68,8 @@ struct editorConfig {
 struct editorConfig E;
 /** prototypes **/
 void editorSetStatusMessage(const char *fmt, ...);
+void editorRefreshScreen();
+char *editorPrompt(char *prompt);
 
 /** terminal **/
 void die(const char *s) {
@@ -308,7 +310,8 @@ void editorUpdateRow(erow *row) {
 }
 
 void editorInsertRow(int at, char *s, size_t len) {
-  if (at < 0 || at > E.numrows) return;
+  if (at < 0 || at > E.numrows)
+    return;
 
   E.row = realloc(E.row, sizeof(erow) * (E.numrows + 1));
   memmove(&E.row[at + 1], &E.row[at], sizeof(erow) * (E.numrows - at));
@@ -338,7 +341,8 @@ void editorFreeRow(erow *row) {
 }
 
 void editorDelRow(int at) {
-  if (at < 0 || at >= E.numrows) return;
+  if (at < 0 || at >= E.numrows)
+    return;
   editorFreeRow(&E.row[at]);
   memmove(&E.row[at], &E.row[at + 1], sizeof(erow) * (E.numrows - at - 1));
   E.numrows--;
@@ -400,8 +404,10 @@ void editorRowDelChar(erow *row, int at) {
 }
 
 void editorDelChar() {
-  if (E.cy == E.numrows) return;
-  if (E.cx == 0 && E.cy == 0) return;
+  if (E.cy == E.numrows)
+    return;
+  if (E.cx == 0 && E.cy == 0)
+    return;
 
   erow *row = &E.row[E.cy];
   if (E.cx > 0) {
@@ -468,8 +474,13 @@ void editorOpen(const char *filename) {
 }
 
 void editorSave() {
-  if (E.filename == NULL)
-    return;
+  if (E.filename == NULL) {
+    E.filename = editorPrompt("Save as: %s (ESC TO CANCEL)");
+    if (E.filename == NULL) {
+      editorSetStatusMessage("You didn't want to save it? Are you sure?");
+      return;
+    }
+  }
 
   int len;
   char *buf = editorRowsToString(&len);
@@ -677,6 +688,36 @@ void editorSetStatusMessage(const char *fmt, ...) {
 }
 
 /** input **/
+char *editorPrompt(char *prompt) {
+  size_t bufsize = 128;
+  char *buf = malloc(bufsize);
+
+  size_t buflen = 0;
+  buf[0] = '\0';
+
+  int c = editorReadKey();
+  if (c == DEL_KEY || c == CTRL_KEY('h') || c == BACKSPACE) {
+    if (buflen != 0)
+      buf[--buflen] = '\0';
+  } else if (c == '\x1b') {
+    editorSetStatusMessage("");
+    free(buf);
+    return NULL;
+  } else if (c == '\r') {
+    if (buflen != 0) {
+      editorSetStatusMessage("");
+      return buf;
+    }
+  } else if (!iscntrl(c) && c < 128) {
+    if (buflen == bufsize - 1) {
+      bufsize *= 2;
+      buf = realloc(buf, bufsize);
+    }
+    buf[buflen++] = c;
+    buf[buflen] = '\0';
+  }
+}
+
 void editorMoveCursor(int key) {
   erow *row = E.cy >= E.numrows ? NULL : &E.row[E.cy];
 
@@ -767,8 +808,9 @@ void editorProcessKeypress() {
   case BACKSPACE:
   case CTRL_KEY('h'):
   case DEL_KEY:
-      if (c == DEL_KEY) editorMoveCursor(ARROW_RIGHT);
-      editorDelChar();
+    if (c == DEL_KEY)
+      editorMoveCursor(ARROW_RIGHT);
+    editorDelChar();
     break;
 
   case PAGE_UP:
