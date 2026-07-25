@@ -69,7 +69,7 @@ struct editorConfig E;
 /** prototypes **/
 void editorSetStatusMessage(const char *fmt, ...);
 void editorRefreshScreen();
-char *editorPrompt(char *prompt);
+char *editorPrompt(char *prompt, void (*callback)(char *, int));
 
 /** terminal **/
 void die(const char *s) {
@@ -278,7 +278,8 @@ int editorRowRxToCx(erow *row, int rx) {
       cur_rx += (EDITOR_TAB_STOP) - (cur_rx & EDITOR_TAB_STOP);
     cur_rx++;
 
-    if (cur_rx > rx) return rx;
+    if (cur_rx > rx)
+      return rx;
   }
   return cx;
 }
@@ -488,7 +489,7 @@ void editorOpen(const char *filename) {
 
 void editorSave() {
   if (E.filename == NULL) {
-    E.filename = editorPrompt("Save as: %s (ESC TO CANCEL)");
+    E.filename = editorPrompt("Save as: %s (ESC TO CANCEL)", NULL);
     if (E.filename == NULL) {
       editorSetStatusMessage("You didn't want to save it? Are you sure?");
       return;
@@ -516,9 +517,8 @@ void editorSave() {
 }
 
 /** find **/
-void editorFind() {
-  char *query = editorPrompt("Search: %s (ESC to cancel)");
-  if (query == NULL)
+void editorFindCallback(char *query, int key) {
+  if (key == '\r' || key == '\x1b')
     return;
 
   for (int i = 0; i < E.numrows; i++) {
@@ -530,6 +530,12 @@ void editorFind() {
       E.rowoff = E.numrows;
       break;
     }
+  }
+}
+void editorFind() {
+  char *query = editorPrompt("Search: %s (ESC to cancel)", editorFindCallback);
+  if (query) {
+    free(query);
   }
 }
 
@@ -719,7 +725,7 @@ void editorSetStatusMessage(const char *fmt, ...) {
 }
 
 /** input **/
-char *editorPrompt(char *prompt) {
+char *editorPrompt(char *prompt, void (*callback)(char *, int)) {
   size_t bufsize = 128;
   char *buf = malloc(bufsize);
 
@@ -741,6 +747,8 @@ char *editorPrompt(char *prompt) {
     } else if (c == '\r') {
       if (buflen != 0) {
         editorSetStatusMessage("");
+        if (callback)
+          callback(buf, c);
         return buf;
       }
     } else if (!iscntrl(c) && c < 128) {
@@ -751,6 +759,9 @@ char *editorPrompt(char *prompt) {
       buf[buflen++] = c;
       buf[buflen] = '\0';
     }
+
+    if (callback)
+      callback(buf, c);
   }
 }
 
